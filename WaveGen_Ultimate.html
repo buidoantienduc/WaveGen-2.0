@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaveGen Ultimate V4.2 - Audio & Pause Fixed</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        :root {
+            --bg: #f8fafc; --panel: #ffffff; --text: #0f172a; 
+            --border: #cbd5e1; --primary: #2563eb; --danger: #ef4444;
+            --grid: #e2e8f0; --tooltip: rgba(255,255,255,0.9);
+            --math-color: #f59e0b;
+        }
+        [data-theme="dark"] {
+            --bg: #0f172a; --panel: #1e293b; --text: #f8fafc; 
+            --border: #334155; --primary: #10b981; --danger: #ef4444;
+            --grid: #334155; --tooltip: rgba(0,0,0,0.8);
+            --math-color: #fbbf24;
+        }
+
+        body { margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; transition: 0.3s; }
+        .sidebar { width: 420px; background: var(--panel); padding: 20px; border-right: 1px solid var(--border); overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+        .main-content { flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 15px; position: relative; }
+        
+        button { padding: 10px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; color: white; background: var(--primary); transition: 0.2s; }
+        button:hover { opacity: 0.8; }
+        .btn-group { display: flex; gap: 10px; }
+        .btn-group button { flex: 1; padding: 8px; font-size: 13px;}
+        .btn-secondary { background: #64748b; }
+        
+        .signal-card { background: var(--bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border); position: relative; margin-bottom: 15px;}
+        .remove-btn { position: absolute; top: 10px; right: 10px; background: var(--danger); padding: 5px 10px; font-size: 12px; }
+        
+        .control-group { margin-bottom: 10px; }
+        .control-group label { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+        input[type="range"] { width: 100%; cursor: pointer; }
+        select, textarea { width: 100%; padding: 8px; border-radius: 4px; background: var(--panel); color: var(--text); border: 1px solid var(--border); box-sizing: border-box; font-family: inherit;}
+        textarea { resize: vertical; min-height: 60px; }
+        
+        .canvas-wrapper { flex: 1; border-radius: 12px; border: 2px solid var(--border); position: relative; background: #000; overflow: hidden; cursor: crosshair; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);}
+        canvas { width: 100%; height: 100%; display: block; }
+        #tooltip { position: absolute; background: var(--tooltip); color: var(--text); padding: 8px 12px; border-radius: 6px; font-family: monospace; font-size: 14px; pointer-events: none; display: none; border: 1px solid var(--border); box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 10; transform: translate(15px, 15px);}
+        
+        .dashboard { display: flex; gap: 20px; padding: 15px; background: var(--panel); border-radius: 8px; border: 1px solid var(--border); font-family: monospace; font-size: 15px;}
+        .dash-item { flex: 1; text-align: center; background: var(--bg); padding: 10px; border-radius: 6px; border: 1px solid var(--border); }
+        .dash-val { font-size: 20px; font-weight: bold; color: var(--math-color); display: block; margin-top: 5px;}
+
+        .feedback-history { background: var(--bg); padding: 10px; border-radius: 6px; font-size: 12px; max-height: 150px; overflow-y: auto; border: 1px solid var(--border); margin-top: 10px;}
+        .fb-item { border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px; }
+        
+        #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 999; }
+        .toast { background: var(--primary); color: white; padding: 12px 20px; border-radius: 6px; margin-top: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); animation: slideIn 0.3s forwards; }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; z-index: 1000; opacity: 0; transition: 0.3s; }
+        .modal-overlay.active { display: flex; opacity: 1; }
+        .modal-content { background: var(--panel); color: var(--text); padding: 30px; border-radius: 12px; width: 700px; max-width: 90%; max-height: 85vh; overflow-y: auto; border: 1px solid var(--border); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2); transform: translateY(-20px); transition: 0.3s;}
+        .modal-overlay.active .modal-content { transform: translateY(0); }
+        .close-btn { float: right; background: transparent; color: var(--text); font-size: 24px; padding: 0; width: auto; line-height: 1; margin-top: -5px; }
+        .close-btn:hover { color: var(--danger); opacity: 1; }
+        .guide-section { margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border); }
+        .guide-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .guide-section h4 { margin: 0 0 10px 0; color: var(--primary); display: flex; align-items: center; gap: 8px; font-size: 18px;}
+        .guide-section ul { margin: 0; padding-left: 20px; line-height: 1.6; font-size: 14.5px;}
+        .guide-section li { margin-bottom: 6px; }
+        .highlight-text { color: var(--math-color); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+            <h2 style="margin: 0; color: var(--primary);">📟 WaveGen V4.2</h2>
+        </div>
+        
+        <div class="btn-group">
+            <button onclick="toggleTheme()" class="btn-secondary">🌓 Sáng/Tối</button>
+            <button onclick="openGuide()" style="background: #8b5cf6;">📖 Hướng Dẫn</button>
+        </div>
+
+        <div class="btn-group">
+            <button id="pauseBtn" onclick="togglePause()" style="background: #f59e0b;">⏸ Tạm Dừng</button>
+            <button id="playBtn" onclick="toggleAudio()">▶ Bật Âm Thanh</button>
+            <button onclick="resetAll()" class="btn-secondary">🔄 Đặt lại</button>
+        </div>
+        
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="realMode" style="width: 18px; height: 18px;" onchange="showToast(this.checked ? 'Đã bật VCC/GND Limit' : 'Đã tắt giới hạn nguồn')">
+                <div>
+                    <div style="color: #ef4444; font-weight: bold; font-size: 14px;">⚡ Clipping (0V - 5V)</div>
+                    <div style="font-size: 11px; opacity: 0.8;">Mô phỏng bão hòa điện áp vi mạch</div>
+                </div>
+            </label>
+            <hr style="border: 0; border-top: 1px dashed var(--border); width: 100%; margin: 5px 0;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="filterMode" style="width: 18px; height: 18px;" onchange="showToast(this.checked ? 'Đã bật Low-pass Filter' : 'Đã tắt lọc nhiễu')">
+                <div>
+                    <div style="color: #10b981; font-weight: bold; font-size: 14px;">🎛️ Lọc Nhiễu (RC Filter)</div>
+                    <div style="font-size: 11px; opacity: 0.8;">Làm mượt tín hiệu nhiễu trắng</div>
+                </div>
+            </label>
+        </div>
+
+        <div id="signals-container"></div>
+        <button onclick="addSignal()" style="background: #0ea5e9;">+ Thêm Tín Hiệu (CH)</button>
+        
+        <div class="btn-group">
+            <button onclick="exportPNG()" class="btn-secondary">📸 Lưu PNG</button>
+            <button onclick="exportCSV()" class="btn-secondary">📊 Tải CSV</button>
+        </div>
+
+        <div style="background: var(--panel); padding: 15px; border-radius: 8px; border: 1px solid var(--border);">
+            <h4 style="margin: 0 0 10px 0; color: var(--primary);">📝 Cộng đồng UTT</h4>
+            <select id="fbType" style="margin-bottom: 10px;">
+                <option value="Báo lỗi vặt">🐞 Báo lỗi vặt</option>
+                <option value="Yêu cầu tính năng">💡 Yêu cầu tính năng</option>
+            </select>
+            <textarea id="fbContent" placeholder="Góp ý cho dự án..."></textarea>
+            <button id="submitFbBtn" onclick="processFeedback()" style="width: 100%; margin-top: 10px; background: #10b981;">Gửi Lên Firebase</button>
+            <div id="fbHistory" class="feedback-history"></div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="canvas-wrapper" id="canvas-wrapper">
+            <canvas id="oscilloscope"></canvas>
+            <div id="tooltip"></div>
+        </div>
+        
+        <div class="dashboard">
+            <div class="dash-item">
+                Đỉnh - Đỉnh (Vpp)
+                <span class="dash-val" id="stat-vpp">0.00 V</span>
+            </div>
+            <div class="dash-item">
+                Hiệu dụng (Vrms)
+                <span class="dash-val" id="stat-vrms" style="color: #10b981;">0.00 V</span>
+            </div>
+            <div class="dash-item">
+                Trung bình (Vavg/DC)
+                <span class="dash-val" id="stat-vavg" style="color: #0ea5e9;">0.00 V</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="guideModal" onclick="if(event.target===this) closeGuide()">
+        <div class="modal-content">
+            <button class="close-btn" onclick="closeGuide()">×</button>
+            <h2 style="margin-top: 0; color: var(--primary); text-align: center; border-bottom: 2px solid var(--border); padding-bottom: 10px;">
+                📖 Hướng Dẫn Sử Dụng WaveGen 
+            </h2>
+            
+            <div class="guide-section">
+                <h4>1. Quan sát đồ thị sóng</h4>
+                <ul>
+                    <li>Màn hình chính mô phỏng dao động ký (Oscilloscope).</li>
+                    <li>Các <strong>đường nét mảnh (mờ)</strong> là tín hiệu của từng Kênh (CH1, CH2...).</li>
+                    <li>Đường <strong>nét đậm <span class="highlight-text">(Màu vàng/cam)</span></strong> là tín hiệu Tổng (Math Sum) của tất cả các kênh cộng lại.</li>
+                    <li><strong>Mẹo:</strong> Nhấn "Tạm dừng" để dễ dàng quan sát và đo đạc số liệu tĩnh. Di chuột vào đồ thị để xem điện áp.</li>
+                </ul>
+            </div>
+
+            <div class="guide-section">
+                <h4>2. Tùy chỉnh thông số Vi mạch</h4>
+                <ul>
+                    <li><strong>Pha (Phase):</strong> Thay đổi góc pha sẽ hiển thị luôn <em>độ trễ thời gian tương ứng (ms)</em>. Thử tạo 2 sóng Sine giống nhau, đặt 1 sóng lệch 180° để xem hiện tượng triệt tiêu tín hiệu.</li>
+                    <li><strong>Offset (Điện áp nền):</strong> Dùng để nâng hoặc hạ toàn bộ trục tín hiệu lên/xuống.</li>
+                    <li><strong>Độ nhiễu (Noise):</strong> Mô phỏng nhiễu trắng (White Noise) trong mạch điện tử thực tế.</li>
+                </ul>
+            </div>
+
+            <div class="guide-section">
+                <h4>3. Chế độ Mô phỏng Nâng cao</h4>
+                <ul>
+                    <li><strong>⚡ Clipping (0V - 5V):</strong> Bật tính năng này để giả lập nguồn cấp VCC = 5V và GND = 0V. Nếu tín hiệu tổng vượt qua dải này, ngọn sóng sẽ bị "xén" (bão hòa), làm sai lệch giá trị đo lường.</li>
+                    <li><strong>🎛️ Lọc Nhiễu (RC Filter):</strong> Áp dụng thuật toán lọc thông thấp (Low-pass) để làm mượt các tín hiệu bị nhiễu răng cưa, khôi phục lại hình dáng sóng ban đầu.</li>
+                </ul>
+            </div>
+
+            <div class="guide-section">
+                <h4>4. Bảng Đo Lường & Tiện ích</h4>
+                <ul>
+                    <li><strong>Dashboard Đo Lường:</strong> Hiển thị trực tiếp các thông số quan trọng của sóng Tổng: <strong>Vpp</strong>, <strong>Vrms</strong>, và <strong>Vavg</strong>.</li>
+                    <li><strong>Âm thanh:</strong> Chuyển đổi tín hiệu thành sóng âm (hỗ trợ nhiễu). Nên bật loa nhỏ trước khi dùng chức năng này.</li>
+                    <li><strong>Xuất dữ liệu:</strong> Dễ dàng lưu đồ thị dưới dạng ảnh PNG hoặc tải file CSV để phân tích sâu hơn bằng Excel hoặc MATLAB.</li>
+                </ul>
+            </div>
+            
+            <div style="text-align: center; margin-top: 20px;">
+                <button onclick="closeGuide()" style="padding: 10px 30px; border-radius: 20px;">Đã Hiểu</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <script>
+        // --- CÁC HÀM TIỆN ÍCH ---
+        const showToast = (message) => {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerText = message;
+            container.appendChild(toast);
+            setTimeout(() => { toast.remove(); }, 3000);
+        };
+
+        const toggleTheme = () => {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            showToast(`Đã chuyển sang giao diện ${newTheme === 'dark' ? 'Tối' : 'Sáng'}`);
+        };
+
+        // --- HÀM TẠM DỪNG (PAUSE) ---
+        let isPaused = false;
+        const togglePause = () => {
+            isPaused = !isPaused;
+            const btn = document.getElementById('pauseBtn');
+            if (isPaused) {
+                btn.innerText = "▶ Tiếp Tục";
+                btn.style.background = "var(--primary)";
+                showToast("Đã tạm dừng đồ thị");
+            } else {
+                btn.innerText = "⏸ Tạm Dừng";
+                btn.style.background = "#f59e0b";
+                showToast("Đã tiếp tục đồ thị");
+            }
+        };
+
+        // --- HÀM ĐIỀU KHIỂN MODAL GUIDE ---
+        const openGuide = () => {
+            const modal = document.getElementById('guideModal');
+            modal.style.display = 'flex';
+            setTimeout(() => modal.classList.add('active'), 10);
+        };
+        const closeGuide = () => {
+            const modal = document.getElementById('guideModal');
+            modal.classList.remove('active');
+            setTimeout(() => modal.style.display = 'none', 300);
+        };
+
+        // --- FIREBASE CONFIG ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyC7sRzNaZscb2oPVLjb6Quugnzp8ZNkxX8",
+            authDomain: "wavegenproject-3b106.firebaseapp.com",
+            projectId: "wavegenproject-3b106",
+            storageBucket: "wavegenproject-3b106.firebasestorage.app",
+            messagingSenderId: "339401684080",
+            appId: "1:339401684080:web:191152e872480a4ad970b5"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const listenToGlobalFeedbacks = () => {
+            const historyDiv = document.getElementById('fbHistory');
+            db.collection("feedbacks").orderBy("serverTimestamp", "desc").limit(10)
+            .onSnapshot((snapshot) => {
+                historyDiv.innerHTML = ''; 
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const uid = data.userId || 'Guest';
+                    historyDiv.innerHTML += `
+                        <div class="fb-item">
+                            <div style="font-size: 13px;"><strong>👤 ...${uid}</strong> <span style="opacity:0.7">${data.type}</span></div>
+                            <div style="color: var(--text); font-style: italic;">"${data.message}"</div>
+                        </div>`;
+                });
+            }, (error) => {
+                console.log("Firebase listener error:", error);
+            });
+        };
+
+        const processFeedback = () => { 
+            const content = document.getElementById('fbContent').value;
+            const type = document.getElementById('fbType').value;
+            if (!content.trim()) return;
+            const btn = document.getElementById('submitFbBtn');
+            btn.innerText = 'Đang gửi...'; btn.disabled = true;
+            const randomId = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+
+            db.collection("feedbacks").add({
+                type: type, 
+                message: content,
+                timestamp: new Date().toLocaleString('vi-VN'),
+                serverTimestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                userId: randomId 
+            }).then(() => {
+                document.getElementById('fbContent').value = '';
+                showToast("Đã lưu lên mây!");
+            }).catch((err) => {
+                showToast("Lỗi gửi góp ý: " + err.message);
+            }).finally(() => { 
+                btn.innerText = 'Gửi Lên Firebase'; 
+                btn.disabled = false; 
+            });
+        };
+
+        // --- QUẢN LÝ TÍN HIỆU ---
+        let signals = [];
+        let signalIdCounter = 0;
+        let frameCount = 0;
+
+        const addSignal = () => {
+            const newSig = { id: signalIdCounter++, type: 'sine', f: 50, a: 1.0, p: 0, off: 2.5, duty: 50, noise: 0 };
+            signals.push(newSig);
+            renderSignals();
+            updateAudio();
+        };
+
+        const removeSignal = (id) => {
+            if(signals.length <= 1) { showToast("Cần giữ ít nhất 1 tín hiệu!"); return; }
+            signals = signals.filter(s => s.id !== id);
+            renderSignals();
+            updateAudio();
+        };
+
+        const updateSignal = (id, field, value) => {
+            const sig = signals.find(s => s.id === id);
+            if (sig) sig[field] = field === 'type' ? value : parseFloat(value);
+            
+            if(field !== 'type') {
+                const el = document.getElementById(`${field}Val-${id}`);
+                if (el) el.innerText = value;
+            }
+            
+            if (field === 'p' || field === 'f') {
+                let delayMs = sig.f > 0 ? ((sig.p / 360) * (1 / sig.f) * 1000).toFixed(2) : '0.00';
+                const pTimeEl = document.getElementById(`pTime-${sig.id}`);
+                if(pTimeEl) pTimeEl.innerText = `${delayMs}ms`;
+            }
+            
+            renderSignals(field === 'type'); 
+            if (field === 'f' || field === 'type' || field === 'noise' || field === 'a') updateAudio();
+        };
+
+        const renderSignals = (rebuildDOM = true) => {
+            if(!rebuildDOM) return;
+            const container = document.getElementById('signals-container');
+            container.innerHTML = '';
+            
+            const colors = ['#0ea5e9', '#ec4899', '#8b5cf6', '#14b8a6'];
+
+            signals.forEach((sig, index) => {
+                const isPulse = sig.type === 'pulse' ? 'block' : 'none';
+                const chColor = colors[index % colors.length];
+                let delayMs = sig.f > 0 ? ((sig.p / 360) * (1 / sig.f) * 1000).toFixed(2) : '0.00';
+
+                container.innerHTML += `
+                    <div class="signal-card" style="border-left: 4px solid ${chColor}">
+                        <strong style="color: ${chColor}">Kênh (CH) ${index + 1}</strong>
+                        <button class="remove-btn" onclick="removeSignal(${sig.id})">Xóa</button>
+                        <div class="control-group" style="margin-top: 10px">
+                            <select onchange="updateSignal(${sig.id}, 'type', this.value)">
+                                <option value="sine" ${sig.type==='sine'?'selected':''}>Sóng Sin</option>
+                                <option value="square" ${sig.type==='square'?'selected':''}>Sóng Vuông</option>
+                                <option value="pulse" ${sig.type==='pulse'?'selected':''}>Xung vuông</option>
+                                <option value="triangle" ${sig.type==='triangle'?'selected':''}>Sóng Tam giác</option>
+                                <option value="dc" ${sig.type==='dc'?'selected':''}>Tín hiệu DC</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label>Tần số (Hz) <span id="fVal-${sig.id}">${sig.f}</span></label>
+                            <input type="range" min="0" max="1000" value="${sig.f}" oninput="updateSignal(${sig.id}, 'f', this.value)">
+                        </div>
+                        <div class="control-group" style="display: ${isPulse}">
+                            <label>Duty Cycle (%) <span id="dutyVal-${sig.id}">${sig.duty}</span></label>
+                            <input type="range" min="10" max="90" value="${sig.duty}" oninput="updateSignal(${sig.id}, 'duty', this.value)">
+                        </div>
+                        <div class="control-group">
+                            <label>Biên độ (V) <span id="aVal-${sig.id}">${sig.a}</span></label>
+                            <input type="range" min="0" max="5" step="0.1" value="${sig.a}" oninput="updateSignal(${sig.id}, 'a', this.value)">
+                        </div>
+                        <div class="control-group">
+                            <label>Độ nhiễu (V) <span id="noiseVal-${sig.id}">${sig.noise}</span></label>
+                            <input type="range" min="0" max="2" step="0.05" value="${sig.noise}" oninput="updateSignal(${sig.id}, 'noise', this.value)">
+                        </div>
+                        <div class="control-group">
+                            <label>Pha: <span id="pVal-${sig.id}">${sig.p}</span>° <span style="color:${chColor}; font-size:11px;">(Trễ: <span id="pTime-${sig.id}">${delayMs}ms</span>)</span></label>
+                            <input type="range" min="0" max="360" value="${sig.p}" oninput="updateSignal(${sig.id}, 'p', this.value)">
+                        </div>
+                        <div class="control-group">
+                            <label>Offset (V) <span id="offVal-${sig.id}">${sig.off}</span></label>
+                            <input type="range" min="-5" max="10" step="0.1" value="${sig.off}" oninput="updateSignal(${sig.id}, 'off', this.value)">
+                        </div>
+                    </div>`;
+            });
+        };
+
+        const calcY = (sig, t) => {
+            if (sig.type === 'dc') return sig.off + (sig.noise > 0 ? (Math.random() - 0.5) * 2 * sig.noise : 0);
+            const wt = 2 * Math.PI * sig.f * t + (sig.p * Math.PI / 180);
+            let y = 0;
+            if (sig.type === 'sine') y = Math.sin(wt);
+            else if (sig.type === 'square') y = Math.sign(Math.sin(wt));
+            else if (sig.type === 'triangle') y = (2 * Math.abs(2 * (t * sig.f - Math.floor(t * sig.f + 0.5))) - 1);
+            else if (sig.type === 'pulse') y = ((wt % (2 * Math.PI) + (2 * Math.PI)) % (2 * Math.PI)) < ((sig.duty/100) * 2 * Math.PI) ? 1 : -1;
+            return (sig.a * y) + sig.off + (sig.noise > 0 ? (Math.random() - 0.5) * 2 * sig.noise : 0);
+        };
+
+        const resetAll = () => {
+            signals = [];
+            document.getElementById('realMode').checked = false;
+            document.getElementById('filterMode').checked = false;
+            addSignal();
+            showToast("Đã đặt lại toàn bộ cài đặt!");
+        };
+
+        // --- VẼ ĐỒ THỊ ---
+        const canvas = document.getElementById('oscilloscope');
+        const ctx = canvas.getContext('2d');
+        let timeOffset = 0;
+        
+        const resizeCanvas = () => { 
+            canvas.width = canvas.parentElement.clientWidth; 
+            canvas.height = canvas.parentElement.clientHeight; 
+        };
+        window.addEventListener('resize', resizeCanvas); 
+
+        // Đoạn code tooltip
+        const wrapper = document.getElementById('canvas-wrapper');
+        const tooltip = document.getElementById('tooltip');
+        
+        wrapper.addEventListener('mousemove', (e) => {
+            const rect = wrapper.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const height = canvas.height;
+            const centerY = height * 0.7;
+            const pixelsPerV = height / 10;
+            
+            const voltage = ((centerY - y) / pixelsPerV).toFixed(2);
+            
+            tooltip.style.display = 'block';
+            tooltip.style.left = (x + 15) + 'px';
+            tooltip.style.top = (y + 15) + 'px';
+            tooltip.innerHTML = `Mức áp: <b>${voltage} V</b>`;
+        });
+        
+        wrapper.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+        });
+
+        // Vòng lặp vẽ đồ thị
+        const draw = () => {
+            const width = canvas.width; const height = canvas.height; 
+            const centerY = height * 0.7; 
+            const isRealMode = document.getElementById('realMode').checked;
+            const isFilterMode = document.getElementById('filterMode').checked;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.fillRect(0, 0, width, height); 
+            ctx.strokeStyle = '#334155'; ctx.lineWidth = 1;
+            for(let i=0; i<=width; i+=width/10) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,height); ctx.stroke(); }
+            for(let i=0; i<=height; i+=height/8) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(width,i); ctx.stroke(); }
+
+            const activeSignals = signals.filter(s => s.f > 0);
+            const minFreq = activeSignals.length > 0 ? Math.min(...activeSignals.map(s => s.f)) : 50;
+            const timeRange = 4 / minFreq; const pixelsPerV = height / 10;
+
+            let rawSumY = [];
+            for (let x = 0; x < width; x++) {
+                let t_plot = (x / width) * timeRange + timeOffset;
+                let sum = 0;
+                signals.forEach(sig => sum += calcY(sig, t_plot));
+                rawSumY.push(sum);
+            }
+
+            let finalSumY = rawSumY;
+            if (isFilterMode) {
+                finalSumY = [];
+                const windowSize = 7; 
+                for(let i=0; i<rawSumY.length; i++) {
+                    let sumFilter = 0; let count = 0;
+                    for(let j=Math.max(0, i-windowSize); j<=Math.min(rawSumY.length-1, i+windowSize); j++) {
+                        sumFilter += rawSumY[j]; count++;
+                    }
+                    finalSumY.push(sumFilter / count);
+                }
+            }
+
+            let displayY = [];
+            let sumSquare = 0, sumTotal = 0, maxV = -999, minV = 999;
+            
+            for(let i=0; i<finalSumY.length; i++) {
+                let v = finalSumY[i];
+                if (isRealMode) {
+                    if (v > 5) v = 5;
+                    if (v < 0) v = 0;
+                }
+                displayY.push(v);
+                
+                if(v > maxV) maxV = v;
+                if(v < minV) minV = v;
+                sumTotal += v;
+                sumSquare += (v * v);
+            }
+
+            frameCount++;
+            if(frameCount % 10 === 0 && displayY.length > 0) { 
+                document.getElementById('stat-vpp').innerText = (maxV - minV).toFixed(2) + ' V';
+                document.getElementById('stat-vavg').innerText = (sumTotal / displayY.length).toFixed(2) + ' V';
+                document.getElementById('stat-vrms').innerText = Math.sqrt(sumSquare / displayY.length).toFixed(2) + ' V';
+            }
+
+            const colors = ['#0ea5e9', '#ec4899', '#8b5cf6', '#14b8a6'];
+            signals.forEach((sig, idx) => {
+                ctx.beginPath();
+                ctx.strokeStyle = colors[idx % colors.length] + '80'; 
+                ctx.lineWidth = 1; 
+                for (let x = 0; x < width; x++) {
+                    let t_plot = (x / width) * timeRange + timeOffset;
+                    let y = calcY(sig, t_plot);
+                    let y_pixel = centerY - (y * pixelsPerV);
+                    if (x === 0) ctx.moveTo(x, y_pixel); else ctx.lineTo(x, y_pixel);
+                }
+                ctx.stroke();
+            });
+
+            ctx.beginPath();
+            ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--math-color').trim();
+            ctx.lineWidth = 3; 
+            for (let x = 0; x < width; x++) {
+                let y_pixel = centerY - (displayY[x] * pixelsPerV);
+                if (x === 0) ctx.moveTo(x, y_pixel); else ctx.lineTo(x, y_pixel);
+            }
+            ctx.stroke();
+
+            if(isRealMode) {
+                ctx.fillStyle = '#ef4444'; ctx.font = '14px monospace';
+                ctx.fillText("5V (VCC Limit)", 10, centerY - (5 * pixelsPerV) - 10);
+                ctx.beginPath(); ctx.moveTo(0, centerY - (5 * pixelsPerV)); ctx.lineTo(width, centerY - (5 * pixelsPerV)); 
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)'; ctx.stroke();
+
+                ctx.fillStyle = '#0ea5e9';
+                ctx.fillText("0V (GND Limit)", 10, centerY + 20);
+                ctx.beginPath(); ctx.moveTo(0, centerY); ctx.lineTo(width, centerY); 
+                ctx.strokeStyle = 'rgba(14, 165, 233, 0.5)'; ctx.stroke();
+            }
+
+            // CHỈ TĂNG TIME OFFSET KHI KHÔNG PAUSE
+            if (!isPaused) {
+                timeOffset += (0.01 / minFreq); 
+            }
+
+            requestAnimationFrame(draw);
+        };
+
+        // --- XUẤT DỮ LIỆU ---
+        const exportPNG = () => {
+            const link = document.createElement('a');
+            link.download = 'WaveGen_Chart.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            showToast("Đã tải ảnh đồ thị PNG thành công!");
+        };
+
+        const exportCSV = () => {
+            let csvContent = "data:text/csv;charset=utf-8,Channel,Frequency(Hz),Amplitude(V),Offset(V),Phase(deg)\n";
+            signals.forEach((s, i) => {
+                csvContent += `CH${i+1},${s.f},${s.a},${s.off},${s.p}\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "WaveGen_Data.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast("Đã tải file CSV cấu hình tín hiệu!");
+        };
+
+        // --- HỆ THỐNG ÂM THANH (Audio API) ĐÃ FIX NHIỄU TRẮNG ---
+        let audioCtx;
+        let audioNodes = {}; 
+        let isAudioPlaying = false;
+
+        // Hàm tạo bộ đệm nhiễu trắng (White Noise)
+        const createWhiteNoiseBuffer = (ctx) => {
+            const bufferSize = ctx.sampleRate * 2; // 2 giây
+            const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+            const output = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                output[i] = Math.random() * 2 - 1; 
+            }
+            return buffer;
+        };
+
+        const toggleAudio = () => {
+            const btn = document.getElementById('playBtn');
+            if (!isAudioPlaying) {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                updateAudio();
+                isAudioPlaying = true;
+                btn.innerText = "🔇 Tắt Âm Thanh";
+                btn.style.background = "var(--danger)";
+                showToast("Đã bật âm thanh (Cẩn thận âm lượng!)");
+            } else {
+                Object.values(audioNodes).forEach(node => {
+                    if(node.osc) node.osc.stop();
+                    if(node.noiseSrc) node.noiseSrc.stop();
+                });
+                audioNodes = {};
+                isAudioPlaying = false;
+                btn.innerText = "▶ Bật Âm Thanh";
+                btn.style.background = "var(--primary)";
+                showToast("Đã tắt âm thanh!");
+            }
+        };
+
+        const updateAudio = () => {
+            if (!isAudioPlaying || !audioCtx) return;
+            
+            const currentIds = signals.map(s => s.id);
+            Object.keys(audioNodes).forEach(id => {
+                if (!currentIds.includes(parseInt(id))) {
+                    if(audioNodes[id].osc) audioNodes[id].osc.stop();
+                    if(audioNodes[id].noiseSrc) audioNodes[id].noiseSrc.stop();
+                    delete audioNodes[id];
+                }
+            });
+
+            signals.forEach(sig => {
+                if (!audioNodes[sig.id]) {
+                    const nodes = {};
+
+                    // Nguồn phát sóng
+                    nodes.osc = audioCtx.createOscillator();
+                    nodes.oscGain = audioCtx.createGain();
+                    nodes.osc.connect(nodes.oscGain);
+                    nodes.oscGain.connect(audioCtx.destination);
+                    nodes.osc.start();
+
+                    // Nguồn phát nhiễu
+                    nodes.noiseSrc = audioCtx.createBufferSource();
+                    nodes.noiseSrc.buffer = createWhiteNoiseBuffer(audioCtx);
+                    nodes.noiseSrc.loop = true; 
+                    nodes.noiseGain = audioCtx.createGain();
+                    nodes.noiseSrc.connect(nodes.noiseGain);
+                    nodes.noiseGain.connect(audioCtx.destination);
+                    nodes.noiseSrc.start();
+
+                    audioNodes[sig.id] = nodes;
+                }
+                
+                const nodes = audioNodes[sig.id];
+                
+                if (sig.type === 'dc') {
+                    nodes.oscGain.gain.setValueAtTime(0, audioCtx.currentTime);
+                } else {
+                    nodes.osc.type = (sig.type === 'pulse') ? 'square' : sig.type;
+                    nodes.osc.frequency.setValueAtTime(sig.f, audioCtx.currentTime);
+                    // Điều chỉnh âm lượng theo biên độ A (Scale nhỏ để bảo vệ tai)
+                    nodes.oscGain.gain.setValueAtTime((sig.a / 5) * 0.3, audioCtx.currentTime);
+                }
+
+                // Điều chỉnh âm lượng nhiễu theo thanh kéo Noise
+                nodes.noiseGain.gain.setValueAtTime((sig.noise / 2) * 0.2, audioCtx.currentTime);
+            });
+        };
+
+        // --- KHỞI TẠO ỨNG DỤNG ---
+        window.onload = () => {
+            resizeCanvas();
+            addSignal();
+            listenToGlobalFeedbacks();
+            draw();
+            showToast("Chào mừng đến với WaveGen V4.2 - Audio Fix");
+        };
+    </script>
+</body>
+</html>
